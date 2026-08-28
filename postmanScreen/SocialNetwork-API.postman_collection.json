@@ -1,0 +1,473 @@
+{
+	"info": {
+		"_postman_id": "a3f1c2d5-8b6e-4d1a-9c3f-1e7b5a2d4c6f",
+		"name": "Social Network API",
+		"description": "Collection di test per le API REST di User, Post e Like (Controller -> Service -> Repository -> Entity). Autenticazione via JWT con un JWTFilter custom nella filter chain di Spring Security: verifica il token, carica lo User (che implementa UserDetails) e popola il SecurityContext, cosi' @PreAuthorize e @AuthenticationPrincipal nei controller hanno un utente autenticato su cui basare le decisioni. Tutti gli endpoint richiedono l'header Authorization: Bearer <token>, tranne quelli sotto /api/auth/**. Il login avviene con username (non email). Le password sono cifrate con BCrypt e mai confrontate in chiaro. Un User ha i campi: username, nomeCompleto, email, password, role (MEMBER o MODERATOR, e' anche la GrantedAuthority esposta da getAuthorities()). Un Post ha solo il campo text: autore e data di pubblicazione sono assegnati dal server, mai dal client. Un utente non puo' mettere piu' di un like sullo stesso post (vincolo anche a livello di database). Non esiste un endpoint per creare direttamente un MODERATOR: registra un utente con 'Registrazione' e poi promuovilo manualmente con una query SQL (UPDATE users SET role='MODERATOR' WHERE username='...'). Esegui prima 'Login' nella cartella Auth API: il token viene salvato automaticamente in {{accessToken}}.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{accessToken}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Auth API",
+			"item": [
+				{
+					"name": "Registrazione",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"mario\",\n    \"nomeCompleto\": \"Mario Rossi\",\n    \"email\": \"mario@email.it\",\n    \"password\": \"1234\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "auth", "register" ]
+						},
+						"description": "Registra un nuovo User (nasce sempre con ruolo MEMBER). Risposta attesa: 201 Created con { \"id\": ... }, oppure 400 se i dati non sono validi o lo username e' gia' in uso. Endpoint escluso dal controllo del token (/api/auth/**)."
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const accessToken = pm.response.json().accessToken;",
+									"    pm.collectionVariables.set(\"accessToken\", accessToken);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"mario\",\n    \"password\": \"1234\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "auth", "login" ]
+						},
+						"description": "Verifica username e password con bcrypt.matches(...) e restituisce un JWT firmato con scadenza 7 giorni. Risposta attesa: 200 OK con { \"accessToken\": \"...\" }, oppure 401 se le credenziali non sono corrette. Lo script di test salva automaticamente il token in {{accessToken}}. Endpoint escluso dal controllo del token."
+					},
+					"response": []
+				},
+				{
+					"name": "Registrazione (utente da promuovere a MODERATOR)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"luca\",\n    \"nomeCompleto\": \"Luca Bianchi\",\n    \"email\": \"luca@email.it\",\n    \"password\": \"1234\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "auth", "register" ]
+						},
+						"description": "Registra l'utente usato poi da 'Login (MODERATOR)'. Nasce con ruolo MEMBER come chiunque altro: prima di 'Login (MODERATOR)' devi promuoverlo manualmente via SQL, es. UPDATE users SET role='MODERATOR' WHERE username='luca' (non esiste, di proposito, un endpoint per farlo dall'API la prima volta). Risposta attesa: 201 Created."
+					},
+					"response": []
+				},
+				{
+					"name": "Login (MODERATOR)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const accessToken = pm.response.json().accessToken;",
+									"    pm.collectionVariables.set(\"moderatorAccessToken\", accessToken);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"luca\",\n    \"password\": \"1234\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "auth", "login" ]
+						},
+						"description": "Login con un utente che ha ruolo MODERATOR (dopo averlo promosso manualmente via SQL), usato per gli esempi degli endpoint riservati. Lo script di test salva il token in {{moderatorAccessToken}}, separato da {{accessToken}}."
+					},
+					"response": []
+				},
+				{
+					"name": "Registrazione (secondo utente, per i test negativi)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"giulia\",\n    \"nomeCompleto\": \"Giulia Verdi\",\n    \"email\": \"giulia@email.it\",\n    \"password\": \"1234\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "auth", "register" ]
+						},
+						"description": "Registra un secondo utente normale (MEMBER), usato solo negli scenari di test negativo (non e' autore del post di prova e non e' MODERATOR). Risposta attesa: 201 Created."
+					},
+					"response": []
+				},
+				{
+					"name": "Login (secondo utente)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const accessToken = pm.response.json().accessToken;",
+									"    pm.collectionVariables.set(\"secondAccessToken\", accessToken);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"giulia\",\n    \"password\": \"1234\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "auth", "login" ]
+						},
+						"description": "Login del secondo utente. Lo script di test salva il token in {{secondAccessToken}}, usato negli scenari di test negativo per dimostrare che le regole di autorizzazione negano l'accesso a chi non e' ne' autore ne' MODERATOR."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "User API",
+			"item": [
+				{
+					"name": "Cambia ruolo di un utente",
+					"request": {
+						"method": "PATCH",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"auth": {
+							"type": "bearer",
+							"bearer": [ { "key": "token", "value": "{{moderatorAccessToken}}", "type": "string" } ]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"role\": \"MODERATOR\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users/1/role",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "users", "1", "role" ]
+						},
+						"description": "Cambia il ruolo dello User con id indicato. Endpoint riservato: @PreAuthorize(\"hasAuthority('MODERATOR')\"). Eseguila DOPO 'Login (MODERATOR)' cosi' {{moderatorAccessToken}} appartiene a un MODERATOR. Risposta attesa: 200 OK, oppure 404 se l'id non esiste, oppure 400 se il valore di role non e' ne' MEMBER ne' MODERATOR."
+					},
+					"response": []
+				},
+				{
+					"name": "Cambia ruolo - utente non MODERATOR (test negativo)",
+					"request": {
+						"method": "PATCH",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"auth": {
+							"type": "bearer",
+							"bearer": [ { "key": "token", "value": "{{secondAccessToken}}", "type": "string" } ]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"role\": \"MODERATOR\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users/2/role",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "users", "2", "role" ]
+						},
+						"description": "Stessa richiesta di 'Cambia ruolo di un utente' ma con il token di un MEMBER ({{secondAccessToken}}), per verificare che @PreAuthorize blocchi l'accesso. Risposta attesa: 403 Forbidden."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Post API",
+			"item": [
+				{
+					"name": "Crea un nuovo post",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const id = pm.response.json().id;",
+									"    pm.collectionVariables.set(\"postIdPerTest\", id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"Il mio primo post\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts" ]
+						},
+						"description": "Crea un nuovo Post. L'autore e la data di pubblicazione sono ricavati automaticamente (autore dallo User autenticato, data dal server), non vanno passati nel body. Richiede Authorization: Bearer <token>. Lo script di test salva l'id creato in {{postIdPerTest}}, usato dalle richieste successive. Risposta attesa: 201 Created, oppure 400 se il testo e' vuoto, oppure 401 se manca il token."
+					},
+					"response": []
+				},
+				{
+					"name": "Crea un nuovo post - SENZA token (test negativo)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"Post non autorizzato\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts" ]
+						},
+						"description": "Stessa richiesta di 'Crea un nuovo post' ma senza header Authorization, per verificare che il JWTFilter blocchi l'accesso. Nessun post deve essere creato. Risposta attesa: 401 Unauthorized, generata direttamente dal JWTFilter (gira prima del DispatcherServlet, quindi ErrorHandlers non interviene qui)."
+					},
+					"response": []
+				},
+				{
+					"name": "Leggi tutti i post",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts" ]
+						},
+						"description": "Restituisce tutti i Post presenti. Richiede Authorization: Bearer <token>. Risposta attesa: 200 OK."
+					},
+					"response": []
+				},
+				{
+					"name": "Leggi un post per id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postIdPerTest}}",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts", "{{postIdPerTest}}" ]
+						},
+						"description": "Restituisce il singolo Post con id indicato. Richiede Authorization: Bearer <token>. Risposta attesa: 200 OK, oppure 404 se l'id non esiste."
+					},
+					"response": []
+				},
+				{
+					"name": "Aggiorna un post (autore)",
+					"request": {
+						"method": "PUT",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"Post modificato dall'autore\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postIdPerTest}}",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts", "{{postIdPerTest}}" ]
+						},
+						"description": "Aggiorna il Post con id indicato. Il chiamante ({{accessToken}}) e' l'autore del post creato in 'Crea un nuovo post': la richiesta passa perche' e' il proprietario della risorsa. Risposta attesa: 200 OK, oppure 404 se l'id non esiste."
+					},
+					"response": []
+				},
+				{
+					"name": "Aggiorna un post - utente non autorizzato (test negativo)",
+					"request": {
+						"method": "PUT",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"auth": {
+							"type": "bearer",
+							"bearer": [ { "key": "token", "value": "{{secondAccessToken}}", "type": "string" } ]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"Tentativo di modifica non autorizzato\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postIdPerTest}}",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts", "{{postIdPerTest}}" ]
+						},
+						"description": "Stesso post di 'Aggiorna un post (autore)', ma con {{secondAccessToken}}: non e' ne' l'autore ne' un MODERATOR. Risposta attesa: 403 Forbidden."
+					},
+					"response": []
+				},
+				{
+					"name": "Aggiorna un post (MODERATOR, non autore)",
+					"request": {
+						"method": "PUT",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"auth": {
+							"type": "bearer",
+							"bearer": [ { "key": "token", "value": "{{moderatorAccessToken}}", "type": "string" } ]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"Post modificato da un MODERATOR\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postIdPerTest}}",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts", "{{postIdPerTest}}" ]
+						},
+						"description": "Stesso post, chiamato con {{moderatorAccessToken}} (eseguire prima 'Login (MODERATOR)'): non e' l'autore ma passa comunque perche' ha ruolo MODERATOR. Risposta attesa: 200 OK."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Like API",
+			"item": [
+				{
+					"name": "Aggiungi un like",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"auth": {
+							"type": "bearer",
+							"bearer": [ { "key": "token", "value": "{{secondAccessToken}}", "type": "string" } ]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postIdPerTest}}/likes",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts", "{{postIdPerTest}}", "likes" ]
+						},
+						"description": "Aggiunge un like al Post {{postIdPerTest}} da parte del secondo utente. Richiede Authorization: Bearer <token>. Risposta attesa: 201 Created."
+					},
+					"response": []
+				},
+				{
+					"name": "Aggiungi lo stesso like di nuovo (test negativo)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"auth": {
+							"type": "bearer",
+							"bearer": [ { "key": "token", "value": "{{secondAccessToken}}", "type": "string" } ]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postIdPerTest}}/likes",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts", "{{postIdPerTest}}", "likes" ]
+						},
+						"description": "Stessa richiesta di 'Aggiungi un like', stesso utente sullo stesso post: un utente non puo' mettere piu' di un like allo stesso post. Risposta attesa: 400 Bad Request."
+					},
+					"response": []
+				},
+				{
+					"name": "Rimuovi il like",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"auth": {
+							"type": "bearer",
+							"bearer": [ { "key": "token", "value": "{{secondAccessToken}}", "type": "string" } ]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postIdPerTest}}/likes",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts", "{{postIdPerTest}}", "likes" ]
+						},
+						"description": "Rimuove il like messo da 'Aggiungi un like'. Risposta attesa: 204 No Content."
+					},
+					"response": []
+				},
+				{
+					"name": "Rimuovi un like inesistente (test negativo)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"auth": {
+							"type": "bearer",
+							"bearer": [ { "key": "token", "value": "{{secondAccessToken}}", "type": "string" } ]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postIdPerTest}}/likes",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "posts", "{{postIdPerTest}}", "likes" ]
+						},
+						"description": "Stessa richiesta di 'Rimuovi il like', ma il like e' gia' stato rimosso: non c'e' piu' nulla da cancellare. Risposta attesa: 404 Not Found."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{ "key": "baseUrl", "value": "http://localhost:3001", "type": "string" },
+		{ "key": "accessToken", "value": "", "type": "string" },
+		{ "key": "moderatorAccessToken", "value": "", "type": "string" },
+		{ "key": "secondAccessToken", "value": "", "type": "string" },
+		{ "key": "postIdPerTest", "value": "", "type": "string" }
+	]
+}

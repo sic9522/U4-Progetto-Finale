@@ -9,6 +9,8 @@ import simone_pierantozzi.u4progettofinale.payloads.NewRoleDTO;
 import simone_pierantozzi.u4progettofinale.payloads.UserRespDTO;
 import simone_pierantozzi.u4progettofinale.services.UserService;
 
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -23,14 +25,11 @@ public class UserController {
 	@PreAuthorize("hasAuthority('MODERATOR')")
 	public UserRespDTO changeRole(@PathVariable Long userId, @RequestBody @Validated NewRoleDTO payload, BindingResult validationResult) {
 		if (validationResult.hasErrors()) {
-			StringBuilder errorsBuilder = new StringBuilder();
-			for (int i = 0; i < validationResult.getFieldErrors().size(); i++) {
-				errorsBuilder.append(validationResult.getFieldErrors().get(i).getDefaultMessage());
-				if (i < validationResult.getFieldErrors().size() - 1) {
-					errorsBuilder.append(". ");
-				}
-			}
-			throw new ValidationException(errorsBuilder.toString());
+			String errorsList = validationResult.getFieldErrors()
+					.stream()
+					.map(fieldError -> fieldError.getDefaultMessage())
+					.collect(Collectors.joining(". "));
+			throw new ValidationException(errorsList);
 		}
 
 		return this.userService.updateRole(userId, payload);
